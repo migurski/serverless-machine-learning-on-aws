@@ -18,13 +18,18 @@ def lambda_handler(event, context):
             print('Read {1}x{0} image from event["img_a85"]'.format(*img.shape))
 
         x, _ = data.transforms.presets.yolo.transform_test([img], short=540)
+        print('Transformed to {3}x{2} image for processing'.format(*x.shape))
+        untransform = [img.shape[1]/x.shape[3], img.shape[0]/x.shape[2]] * 2
         class_IDs, scores, bounding_boxs = net(x)
         
         return [
             {
                 'class': net.classes[int(class_IDs[0,i,0].asscalar())],
                 'score': round(float(scores[0,i,0].asscalar()), 3),
-                'bounds': [int(n) for n in bounding_boxs[0,i,:].asnumpy()],
+                'bounds': [
+                    int(n * u) for (n, u)
+                    in zip(bounding_boxs[0,i,:].asnumpy(), untransform)
+                    ],
             }
             for i in range(class_IDs.shape[1])
             if scores[0,i,0].asscalar() > .3
