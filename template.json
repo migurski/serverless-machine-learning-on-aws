@@ -936,5 +936,16 @@
                 }
             }
         }
+    },
+    "Outputs" : {
+        "InferenceFunction" : {
+            "Description" : "Lambda ARN",
+            "Value" : {
+                "Fn::GetAtt": [
+                    "Inference",
+                    "Arn"
+                ]
+            }
+        }
     }
 }
