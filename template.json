@@ -12,11 +12,6 @@
             "Type": "String",
             "Default": "https://github.com/migurski/serverless-machine-learning-on-aws/raw/master/demo/inference.zip",
             "Description": "Enter a URL for the Lambda inference .zip package."
-        },
-        "FrontendCode": {
-            "Type": "String",
-            "Default": "https://github.com/migurski/serverless-machine-learning-on-aws/raw/master/demo/frontend.html",
-            "Description": "Enter a URL for the static frontend code."
         }
     },
     "Mappings" : {
@@ -940,34 +935,6 @@
                 }
             }
         },
-        "InferenceApp": {
-            "Type": "AWS::S3::Bucket",
-            "Properties": {
-                "LifecycleConfiguration": {
-                    "Rules": [
-                        {
-                            "Status": "Enabled",
-                            "NoncurrentVersionExpirationInDays": 30,
-                            "Transitions": [
-                                {
-                                    "StorageClass": "STANDARD_IA",
-                                    "TransitionInDays": 30
-                                }
-                            ]
-                        }
-                    ]
-                },
-                "Tags": [
-                    {
-                        "Key": "project",
-                        "Value": "lambda-layers"
-                    }
-                ],
-                "VersioningConfiguration": {
-                    "Status": "Enabled"
-                }
-            }
-        },
         "S3CleanupRole": {
             "Type": "AWS::IAM::Role",
             "Properties": {
@@ -1015,12 +982,6 @@
                                                 "LambdaLayerBucket",
                                                 "Arn"
                                             ]
-                                        },
-                                        {
-                                            "Fn::GetAtt": [
-                                                "InferenceApp",
-                                                "Arn"
-                                            ]
                                         }
                                     ],
                                     "Action": [
@@ -1030,20 +991,6 @@
                                 {
                                     "Effect": "Allow",
                                     "Resource": [
-                                        {
-                                            "Fn::Join": [
-                                                "/",
-                                                [
-                                                    {
-                                                        "Fn::GetAtt": [
-                                                            "InferenceApp",
-                                                            "Arn"
-                                                        ]
-                                                    },
-                                                    "*"
-                                                ]
-                                            ]
-                                        },
                                         {
                                             "Fn::Join": [
                                                 "/",
@@ -1126,53 +1073,8 @@
                                         ]
                                     ]
                                 },
-                                {
-                                    "Fn::Join": [
-                                        "",
-                                        [
-                                            "        front_end = '",
-                                            {
-                                                "Ref": "InferenceApp"
-                                            },
-                                            "'"
-                                        ]
-                                    ]
-                                },
                                 "        if event['RequestType'] == 'Delete':",
                                 "            delete_all(lambda_layers)",
-                                "            delete_all(front_end)",
-                                "        if event['RequestType'] == 'Create':",
-                                {
-                                    "Fn::Join": [
-                                        "",
-                                        [
-                                            "            response = http.request('GET','",
-                                            {
-                                                "Ref": "FrontendCode"
-                                            },
-                                            "')"
-                                        ]
-                                    ]
-                                },
-                                "            text = response.data.decode('utf-8')",
-                                {
-                                    "Fn::Join": [
-                                        "",
-                                        [
-                                            "            text = text.replace('API_GATEWAY_ENDPOINT_URL','https://",
-                                            {
-                                                "Ref": "InferenceAPI"
-                                            },
-                                            ".execute-api.",
-                                            {
-                                                "Ref": "AWS::Region"
-                                            },
-                                            ".amazonaws.com/Production/')"
-                                        ]
-                                    ]
-                                },
-                                "            object = s3.Object(front_end, 'frontend.html')",
-                                "            object.put(Body=text.encode(), ContentType='text/html')",
                                 "        send(event, context, 'SUCCESS', {'result': 'SUCCESS'}, http)",
                                 "    except Exception as e:",
                                 "        print(e)",
@@ -1199,8 +1101,7 @@
             "Type": "Custom::s3Operations",
             "DependsOn": [
                 "LambdaLayerBucket",
-                "s3Lambda",
-                "InferenceApp"
+                "s3Lambda"
             ],
             "Properties": {
                 "ServiceToken": {
@@ -1210,131 +1111,6 @@
                     ]
                 }
             }
-        },
-        "AppPolicy": {
-            "Type": "AWS::S3::BucketPolicy",
-            "Properties": {
-                "Bucket": {
-                    "Ref": "InferenceApp"
-                },
-                "PolicyDocument": {
-                    "Statement": [
-                        {
-                            "Effect": "Allow",
-                            "Principal": {
-                                "CanonicalUser": {
-                                    "Fn::GetAtt": [
-                                        "CloudfrontOAI",
-                                        "S3CanonicalUserId"
-                                    ]
-                                }
-                            },
-                            "Action": "s3:GetObject",
-                            "Resource": {
-                                "Fn::Join": [
-                                    "",
-                                    [
-                                        {
-                                            "Fn::GetAtt": [
-                                                "InferenceApp",
-                                                "Arn"
-                                            ]
-                                        },
-                                        "/*"
-                                    ]
-                                ]
-                            }
-                        }
-                    ]
-                }
-            }
-        },
-        "AppDistribution": {
-            "Type": "AWS::CloudFront::Distribution",
-            "Properties": {
-                "DistributionConfig": {
-                    "DefaultCacheBehavior": {
-                        "Compress": true,
-                        "ForwardedValues": {
-                            "QueryString": false
-                        },
-                        "TargetOriginId": {
-                            "Ref": "InferenceApp"
-                        },
-                        "ViewerProtocolPolicy": "redirect-to-https"
-                    },
-                    "DefaultRootObject": "frontend.html",
-                    "CustomErrorResponses": [
-                        {
-                            "ErrorCachingMinTTL": 300,
-                            "ErrorCode": 403,
-                            "ResponseCode": 404,
-                            "ResponsePagePath": "/404.html"
-                        }
-                    ],
-                    "Enabled": true,
-                    "HttpVersion": "http2",
-                    "Origins": [
-                        {
-                            "DomainName": {
-                                "Fn::Join": [
-                                    "",
-                                    [
-                                        {
-                                            "Ref": "InferenceApp"
-                                        },
-                                        ".s3.amazonaws.com"
-                                    ]
-                                ]
-                            },
-                            "Id": {
-                                "Ref": "InferenceApp"
-                            },
-                            "S3OriginConfig": {
-                                "OriginAccessIdentity": {
-                                    "Fn::Join": [
-                                        "",
-                                        [
-                                            "origin-access-identity/cloudfront/",
-                                            {
-                                                "Ref": "CloudfrontOAI"
-                                            }
-                                        ]
-                                    ]
-                                }
-                            }
-                        }
-                    ],
-                    "PriceClass": "PriceClass_100",
-                    "ViewerCertificate": {
-                        "CloudFrontDefaultCertificate": true,
-                        "MinimumProtocolVersion": "TLSv1"
-                    }
-                },
-                "Tags": [
-                    {
-                        "Key": "project",
-                        "Value": "lambda-layers"
-                    }
-                ]
-            }
-        },
-        "CloudfrontOAI": {
-            "Type": "AWS::CloudFront::CloudFrontOriginAccessIdentity",
-            "Properties": {
-                "CloudFrontOriginAccessIdentityConfig": {
-                    "Comment": "S3 Origin Access Identity"
-                }
-            }
         }
-    },
-    "Outputs" : {
-        "CloudFrontURL" : {
-          "Description" : "Frontend URL",
-          "Value" : {"Fn::GetAtt": [
-            "AppDistribution",
-            "DomainName"
-            ]}
-        }
-      }
+    }
 }
